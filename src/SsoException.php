@@ -19,8 +19,15 @@ class SsoException extends RuntimeException
     /** The SSO rejected client_id / client_secret. */
     public const INVALID_CLIENT = 'invalid_client';
 
-    /** The code was missing, invalid, expired, already used, or for another client. */
+    /**
+     * The code was missing, invalid, expired, already used, or for another
+     * client - or the user's AD account has been disabled, has expired, or
+     * was deleted since they signed in to the SSO.
+     */
     public const INVALID_GRANT = 'invalid_grant';
+
+    /** The SSO answered 503: it could not reach Active Directory, or is down for maintenance. */
+    public const UNAVAILABLE = 'unavailable';
 
     /** The token endpoint answered, but not with the expected shape. */
     public const INVALID_RESPONSE = 'invalid_response';
@@ -90,7 +97,15 @@ class SsoException extends RuntimeException
      */
     public static function invalidGrant(array $context = []): self
     {
-        return new self(self::INVALID_GRANT, 'The SSO authorization code is invalid, expired, or already used.', $context);
+        return new self(self::INVALID_GRANT, 'The SSO refused the sign-in: the code is invalid, expired, or already used, or the account is no longer active.', $context);
+    }
+
+    /**
+     * @param  array<string, mixed>  $context
+     */
+    public static function unavailable(array $context = []): self
+    {
+        return new self(self::UNAVAILABLE, 'The SSO is temporarily unavailable.', $context);
     }
 
     /**

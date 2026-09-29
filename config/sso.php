@@ -122,7 +122,9 @@ return [
     |
     | sync: SSO profile field => users column, written on every sign-in.
     | Available fields: guid, username, name, email, department, title,
-    | employee_number. A blank SSO value never overwrites local data.
+    | employee_number, ou. A blank SSO value never overwrites local data.
+    | Groups are not profile fields: read them from the SsoAuthenticated
+    | event, Sso::groups(), or the sso.group middleware.
     |
     | password_column: new users get an unusable random password here, so a
     | NOT NULL password column needs no migration. null to skip.

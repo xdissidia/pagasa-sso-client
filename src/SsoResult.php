@@ -2,8 +2,11 @@
 
 namespace Pagasa\Sso;
 
+use Illuminate\Support\Str;
+
 /**
- * A successful token exchange: the profile plus the SSO's freshness claims.
+ * A successful token exchange: the profile, the user's AD groups for this
+ * app, and the SSO's freshness claims.
  */
 class SsoResult
 {
@@ -13,11 +16,15 @@ class SsoResult
      *                              remember-me cookie
      * @param  string[]|null  $amr  methods used: pwd (AD password), otp (authenticator
      *                              code), rc (recovery code)
+     * @param  string[]  $groups  the user's AD groups, nested memberships included, that
+     *                            start with the group prefix this app is registered with
+     *                            on the SSO. Empty when the app has no prefix.
      */
     public function __construct(
         public SsoUser $user,
         public ?int $authTime,
-        public ?array $amr
+        public ?array $amr,
+        public array $groups = []
     ) {
     }
 
@@ -28,12 +35,43 @@ class SsoResult
     {
         $authTime = $payload['auth_time'] ?? null;
         $amr = $payload['amr'] ?? null;
+        $groups = $payload['groups'] ?? null;
 
         return new self(
             SsoUser::fromArray($payload['user']),
             is_numeric($authTime) ? (int) $authTime : null,
-            is_array($amr) ? array_values(array_filter($amr, 'is_string')) : null
+            is_array($amr) ? array_values(array_filter($amr, 'is_string')) : null,
+            // Absent from SSOs that predate group release: no groups.
+            is_array($groups) ? array_values(array_filter($groups, 'is_string')) : []
         );
+    }
+
+    /**
+     * Whether the user is in any of the given AD groups.
+     */
+    public function inGroup(string ...$groups): bool
+    {
+        return self::anyGroupMatches($this->groups, $groups);
+    }
+
+    /**
+     * Whether $groups holds any of $wanted. AD group names are
+     * case-insensitive, so the comparison is too.
+     *
+     * @param  string[]  $groups
+     * @param  string[]  $wanted
+     */
+    public static function anyGroupMatches(array $groups, array $wanted): bool
+    {
+        $groups = array_map([Str::class, 'lower'], $groups);
+
+        foreach ($wanted as $group) {
+            if (in_array(Str::lower($group), $groups, true)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

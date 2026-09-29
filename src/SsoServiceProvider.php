@@ -8,6 +8,7 @@ use Pagasa\Sso\Contracts\UserResolver;
 use Pagasa\Sso\Http\DefaultFailureResponder;
 use Pagasa\Sso\Http\Middleware\EnsureSsoAuthenticated;
 use Pagasa\Sso\Http\Middleware\RequireFreshAuthentication;
+use Pagasa\Sso\Http\Middleware\RequireSsoGroup;
 use Pagasa\Sso\Resolvers\GuidUserResolver;
 
 class SsoServiceProvider extends ServiceProvider
@@ -34,6 +35,7 @@ class SsoServiceProvider extends ServiceProvider
         $router = $this->app['router'];
         $router->aliasMiddleware('sso.auth', EnsureSsoAuthenticated::class);
         $router->aliasMiddleware('sso.fresh', RequireFreshAuthentication::class);
+        $router->aliasMiddleware('sso.group', RequireSsoGroup::class);
 
         if ($this->app['config']->get('sso.routes.enabled', true)) {
             $this->loadRoutesFrom(__DIR__.'/../routes/sso.php');

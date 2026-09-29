@@ -37,6 +37,7 @@ class SsoResponses
             'department' => 'Weather Division',
             'title' => 'Weather Specialist I',
             'employee_number' => '012345',
+            'ou' => 'OU=Weather Division,OU=Central Office',
         ], $overrides);
     }
 
@@ -44,13 +45,15 @@ class SsoResponses
      * A 200 token-endpoint body.
      *
      * @param  array<string, string|null>  $user  overrides for user()
-     * @param  array<string, mixed>  $claims  overrides for auth_time (default now) and amr (default ['pwd'])
+     * @param  array<string, mixed>  $claims  overrides for groups (default []), auth_time
+     *                                        (default now) and amr (default ['pwd'])
      * @return array<string, mixed>
      */
     public static function token(array $user = [], array $claims = []): array
     {
         return array_merge([
             'user' => self::user($user),
+            'groups' => [],
             'auth_time' => time(),
             'amr' => ['pwd'],
         ], $claims);

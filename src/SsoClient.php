@@ -137,6 +137,10 @@ class SsoClient
             throw SsoException::invalidGrant($context);
         }
 
+        if ($response->status() === 503) {
+            throw SsoException::unavailable($context);
+        }
+
         if (! $response->successful()) {
             throw SsoException::invalidResponse($context);
         }
@@ -154,7 +158,8 @@ class SsoClient
     }
 
     /**
-     * Record a completed sign-in's freshness claims against the user it signed in.
+     * Record a completed sign-in's freshness claims and groups against the
+     * user it signed in.
      */
     public function markVerified(Request $request, Authenticatable $user, string $guard, SsoResult $result): void
     {
@@ -163,6 +168,7 @@ class SsoClient
             'user' => $user->getAuthIdentifier(),
             'auth_time' => $result->authTime,
             'amr' => $result->amr,
+            'groups' => $result->groups,
         ]);
     }
 
@@ -188,6 +194,32 @@ class SsoClient
         $verified = $this->verified($request);
 
         return isset($verified['amr']) && is_array($verified['amr']) ? $verified['amr'] : null;
+    }
+
+    /**
+     * The current user's AD groups for this app, as released at their last
+     * SSO sign-in in this session. Null if unknown: the session was not
+     * started through the SSO (e.g. restored from this app's remember-me
+     * cookie), or predates group support.
+     *
+     * @return string[]|null
+     */
+    public function groups(?Request $request = null): ?array
+    {
+        $verified = $this->verified($request);
+
+        return isset($verified['groups']) && is_array($verified['groups']) ? $verified['groups'] : null;
+    }
+
+    /**
+     * Whether the current user is in any of the given AD groups. False while
+     * their groups are unknown.
+     */
+    public function inGroup(string ...$groups): bool
+    {
+        $known = $this->groups();
+
+        return $known !== null && SsoResult::anyGroupMatches($known, $groups);
     }
 
     public function states(Request $request): PendingStates

@@ -58,6 +58,10 @@ abstract class TestCase extends Orchestra
         $this->app['router']->get('/sensitive', function () {
             return 'sensitive';
         })->middleware(['web', 'sso.auth', 'sso.fresh:300']);
+
+        $this->app['router']->get('/admin', function () {
+            return 'admin';
+        })->middleware(['web', 'sso.auth', 'sso.group:PMIS-Admin,PMIS-Approver']);
     }
 
     protected function makeUser(array $attributes = []): User

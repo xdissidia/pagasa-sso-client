@@ -90,6 +90,7 @@ class SsoClientTest extends TestCase
             [422, SsoException::INVALID_RESPONSE],
             [429, SsoException::INVALID_RESPONSE],
             [500, SsoException::INVALID_RESPONSE],
+            [503, SsoException::UNAVAILABLE],
         ];
 
         foreach ($cases as [$status, $reason]) {

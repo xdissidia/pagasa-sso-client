@@ -38,6 +38,42 @@ class SsoResultTest extends TestCase
         }
     }
 
+    public function test_groups_and_ou_are_read_from_the_response(): void
+    {
+        $result = SsoResult::fromResponse(SsoResponses::token(
+            ['ou' => 'OU=Hydromet,OU=Central Office'],
+            ['groups' => ['PMIS-Admin', 7, null, ['nested'], 'PMIS-Viewer']]
+        ));
+
+        $this->assertSame(['PMIS-Admin', 'PMIS-Viewer'], $result->groups, 'non-strings are dropped');
+        $this->assertSame('OU=Hydromet,OU=Central Office', $result->user->ou);
+        $this->assertSame('OU=Hydromet,OU=Central Office', $result->user->toArray()['ou']);
+    }
+
+    public function test_a_response_without_groups_means_no_groups(): void
+    {
+        // An SSO that predates group release sends neither key.
+        $payload = SsoResponses::token();
+        unset($payload['groups'], $payload['user']['ou']);
+
+        $result = SsoResult::fromResponse($payload);
+
+        $this->assertSame([], $result->groups);
+        $this->assertNull($result->user->ou);
+        $this->assertFalse($result->inGroup('PMIS-Admin'));
+    }
+
+    public function test_group_membership_is_any_of_and_case_insensitive(): void
+    {
+        $result = SsoResult::fromResponse(SsoResponses::token([], ['groups' => ['PMIS-Approver']]));
+
+        $this->assertTrue($result->inGroup('pmis-approver'));
+        $this->assertTrue($result->inGroup('PMIS-Admin', 'PMIS-Approver'));
+        $this->assertFalse($result->inGroup('PMIS-Admin'));
+        $this->assertFalse($result->inGroup('PMIS-'), 'names match whole, not by prefix');
+        $this->assertFalse($result->inGroup());
+    }
+
     public function test_raw_profile_fields_stay_reachable(): void
     {
         $result = SsoResult::fromResponse(SsoResponses::token(['employee_number' => ' 0042 ', 'extra' => 'x']));

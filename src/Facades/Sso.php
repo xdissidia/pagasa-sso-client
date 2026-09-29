@@ -14,6 +14,8 @@ use Pagasa\Sso\SsoClient;
  * @method static \Pagasa\Sso\SsoResult exchange(string $code)
  * @method static int|null authTime(?\Illuminate\Http\Request $request = null)
  * @method static string[]|null amr(?\Illuminate\Http\Request $request = null)
+ * @method static string[]|null groups(?\Illuminate\Http\Request $request = null)
+ * @method static bool inGroup(string ...$groups)
  *
  * @see SsoClient
  */

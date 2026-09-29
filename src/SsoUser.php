@@ -7,11 +7,16 @@ namespace Pagasa\Sso;
  *
  * Only guid is immutable (AD objectGUID). Every other field can change or be
  * recycled, so key local records on guid. Blank values arrive as null.
+ *
+ * ou is informational: OUs get reorganized, so gate access on
+ * SsoResult::$groups instead.
  */
 class SsoUser
 {
     /**
      * @param  array<string, mixed>  $raw
+     * @param  string|null  $ou  the AD container the account sits in, without the
+     *                           domain components, e.g. "OU=Hydromet,OU=Central Office"
      */
     public function __construct(
         public ?string $guid,
@@ -21,7 +26,8 @@ class SsoUser
         public ?string $department,
         public ?string $title,
         public ?string $employeeNumber,
-        protected array $raw = []
+        protected array $raw = [],
+        public ?string $ou = null
     ) {
     }
 
@@ -38,7 +44,8 @@ class SsoUser
             self::clean($profile['department'] ?? null),
             self::clean($profile['title'] ?? null),
             self::clean($profile['employee_number'] ?? null),
-            $profile
+            $profile,
+            self::clean($profile['ou'] ?? null)
         );
     }
 
@@ -73,6 +80,7 @@ class SsoUser
             'department' => $this->department,
             'title' => $this->title,
             'employee_number' => $this->employeeNumber,
+            'ou' => $this->ou,
         ];
     }
 

@@ -7,6 +7,7 @@ three env vars, and put `sso.auth` on your routes. The package covers:
 - the callback and its state check
 - the server-to-server code exchange
 - step-up re-verification
+- route access by AD group
 - matching the SSO profile to a local user
 
 Your app only decides how users are matched, and only if the default doesn't fit.
@@ -21,11 +22,12 @@ Your app only decides how users are matched, and only if the default doesn't fit
 3. [Configure](#configure)
 4. [Protect routes](#protect-routes)
 5. [Step-up: re-verify before sensitive actions](#step-up-re-verify-before-sensitive-actions)
-6. [Matching SSO users to local users](#matching-sso-users-to-local-users)
-7. [When sign-in fails](#when-sign-in-fails)
-8. [Events, logging, logout](#events-logging-logout)
-9. [Testing your app](#testing-your-app)
-10. [Moving from a hand-rolled client](#moving-from-a-hand-rolled-client)
+6. [Groups: permissions from AD](#groups-permissions-from-ad)
+7. [Matching SSO users to local users](#matching-sso-users-to-local-users)
+8. [When sign-in fails](#when-sign-in-fails)
+9. [Events, logging, logout](#events-logging-logout)
+10. [Testing your app](#testing-your-app)
+11. [Moving from a hand-rolled client](#moving-from-a-hand-rolled-client)
 
 ## Install
 
@@ -61,12 +63,17 @@ The service provider and the `Sso` facade register themselves.
 On the **SSO server**, run:
 
 ```bash
-php artisan sso:client "PMIS" https://pmis.pagasa.gov/sso/callback --app-url=https://pmis.pagasa.gov
+php artisan sso:client "PMIS" https://pmis.pagasa.gov/sso/callback --app-url=https://pmis.pagasa.gov --group-prefix=PMIS-
 ```
 
 The URL must be your app's callback, `{APP_URL}/sso/callback`. It must match
 **exactly**: scheme, host and path. The command prints `SSO_CLIENT_ID` and
 `SSO_CLIENT_SECRET` once, and the secret cannot be recovered afterwards.
+
+`--group-prefix` is optional. It releases the user's AD groups that start with
+it to your app (see [Groups](#groups-permissions-from-ad)). To set or remove it
+on an app that is already registered:
+`php artisan sso:client-groups pmis PMIS-` or `php artisan sso:client-groups pmis --clear`.
 
 ## Configure
 
@@ -283,13 +290,78 @@ Sso::authTime();   // Unix time of the last verification, or null
 Sso::amr();        // ['pwd'], ['pwd', 'otp'], ['otp'], ['rc'] ...
 ```
 
+## Groups: permissions from AD
+
+The SSO releases the user's AD groups that start with your app's group
+prefix, and nothing else. With the prefix `PMIS-`, access is managed in AD by
+adding people to `PMIS-Admin`, `PMIS-Approver`, and so on. Membership through
+nested groups counts.
+
+Gate routes with `sso.group`. Being in any one of the listed groups is
+enough:
+
+```php
+Route::middleware(['sso.auth', 'sso.group:PMIS-Admin,PMIS-Approver'])->group(function () {
+    Route::get('/approvals', ApprovalController::class);
+});
+```
+
+| Situation | What happens |
+| --- | --- |
+| In one of the groups | Passes |
+| Groups known, but in none of them | `403` |
+| Groups not known in this session (restored from a remember-me cookie, or signed in before your app upgraded) | Sent through the SSO once to fetch them, then brought back |
+| Groups not known, on a JSON request or with SSO disabled | `403` |
+
+To check groups yourself:
+
+```php
+use Pagasa\Sso\Facades\Sso;
+
+Sso::groups();                 // ['PMIS-Admin', 'PMIS-Viewer'], or null if not known
+Sso::inGroup('PMIS-Admin');    // true if in any of the names given
+```
+
+```blade
+@if (Sso::inGroup('PMIS-Admin'))
+    <a href="/admin">Admin</a>
+@endif
+```
+
+- Group names compare case-insensitively, because AD's do.
+- Groups are recorded at sign-in and kept for the session. A change in AD
+  reaches your app the next time the user signs in through the SSO, not
+  in the middle of a session.
+- The SSO checks the account in AD at every sign-in. Disabled, expired and
+  deleted accounts get `invalid_grant`, even when their SSO session is old.
+
+To keep roles in your own tables instead, map the groups when the user signs
+in:
+
+```php
+use Illuminate\Support\Facades\Event;
+use Pagasa\Sso\Events\SsoAuthenticated;
+
+Event::listen(function (SsoAuthenticated $event) {
+    $event->user->forceFill([
+        'is_admin' => $event->result->inGroup('PMIS-Admin'),
+    ])->save();
+});
+```
+
+A custom `UserResolver` can read them from `$result->groups` too.
+
 ## Matching SSO users to local users
 
 The SSO sends this profile:
 
 ```
-guid, username, name, email, department, title, employee_number
+guid, username, name, email, department, title, employee_number, ou
 ```
+
+`ou` is the AD container the account sits in, e.g.
+`OU=Hydromet,OU=Central Office`. Use it for display: OUs get reorganized, so
+gate access on [groups](#groups-permissions-from-ad) instead.
 
 **Only `guid` never changes**; it is AD's objectGUID. `employee_number` and
 `username` can be reassigned to someone else. Key your users on `guid`.
@@ -379,8 +451,9 @@ your login route with the reason flashed:
 | `state` | Callback state unknown or expired (a stale bookmark, or a forged request) |
 | `unreachable` | Could not reach the SSO (DNS, timeout, TLS) |
 | `invalid_client` | Wrong `SSO_CLIENT_ID` / `SSO_CLIENT_SECRET` |
-| `invalid_grant` | The code expired (60s), was already used, or was missing |
-| `invalid_response` | The SSO answered with something unexpected (429, 5xx) |
+| `invalid_grant` | The code expired (60s), was already used, or was missing; or the AD account is disabled, expired, or deleted |
+| `unavailable` | The SSO could not reach Active Directory, or is down for maintenance (503). Try again shortly |
+| `invalid_response` | The SSO answered with something unexpected (429, other 5xx) |
 | `stale` | A step-up came back without a fresh verification |
 | `no_account` | No local user matches, and provisioning is off |
 | `user_mismatch` | The SSO returned a different person than the one signed in |
@@ -391,8 +464,9 @@ To fully control the response, bind your own
 ## Events, logging, logout
 
 - `Pagasa\Sso\Events\SsoAuthenticated`: carries `$user`, `$result` (the full
-  `SsoResult`), `$stepUp` and `$guard`. Listen to it to copy
-  `department`/`title` elsewhere, or to write an audit trail.
+  `SsoResult`, groups included), `$stepUp` and `$guard`. Listen to it to copy
+  `department`/`title` elsewhere, map groups to roles, or write an audit
+  trail.
 - `Pagasa\Sso\Events\SsoFailed`: carries `$exception` (`->reason()`,
   `->context()`) and `$request`.
 - The package logs every sign-in and failure to `SSO_LOG_CHANNEL`, or to the
@@ -422,7 +496,9 @@ public function test_staff_can_sign_in(): void
 ```
 
 - `SsoResponses::fake($userOverrides, $claims)`: a successful exchange. Call
-  it again to replace it, for example to sign in and then step up.
+  it again to replace it, for example to sign in and then step up. Pass
+  groups as a claim: `SsoResponses::fake(['guid' => 'g-1'], ['groups' => ['PMIS-Admin']])`.
+  By default there are none.
 - `SsoResponses::fakeError('invalid_client', 401)`: a refused exchange.
 - `SsoResponses::pendingState($state, $stepUp = false)`: session data that
   makes `$state` valid.
@@ -452,4 +528,4 @@ For non-Laravel clients, see "Endpoint reference" in the SSO repo's README.
    `GET {SSO_URL}/sso/authorize?client_id&redirect_uri&state[&prompt=login]`.
 2. The SSO sends it back to `{redirect_uri}?code&state`.
 3. The client calls `POST {SSO_URL}/api/sso/token` (form: `client_id`,
-   `client_secret`, `code`) and gets back `{user, auth_time, amr}`.
+   `client_secret`, `code`) and gets back `{user, groups, auth_time, amr}`.

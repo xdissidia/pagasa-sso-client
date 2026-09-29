@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.1.0
+
+Additive; apps on 1.0 need no changes. Against an SSO that does not send
+groups yet, every user simply has none.
+
+- AD groups: `SsoResult::$groups` and `inGroup()`, `Sso::groups()` and
+  `Sso::inGroup()` for the signed-in user, and the `sso.group:{groups}` route
+  middleware. Groups are recorded at sign-in and kept for the session; a
+  session without them goes through the SSO once to fetch them.
+- `SsoUser::$ou`: the AD container the account sits in. Also syncable
+  through `sso.users.sync`.
+- New failure reason `unavailable` for the SSO's `503` (Active Directory
+  unreachable, or maintenance). It used to surface as `invalid_response`.
+- `invalid_grant` also covers accounts disabled, expired, or deleted in AD,
+  which the SSO now refuses at every sign-in.
+- `SsoResponses` fakes include `ou` and `groups` (default none).
+
 ## 1.0.0
 
 First release.
