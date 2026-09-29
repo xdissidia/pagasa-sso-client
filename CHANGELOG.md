@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.1
+
+- `sso.group` and `sso.fresh` now use the route's guard (`sso.auth:{guard}`).
+  Before, their SSO round-trip signed the user in on the default guard, and
+  they read groups and freshness recorded for whichever guard signed in
+  last.
+- `Sso::groups()`, `Sso::authTime()` and `Sso::amr()` take an optional guard,
+  and `Sso::activeGuard()` names the guard the current request uses.
+
 ## 1.1.0
 
 Additive; apps on 1.0 need no changes. Against an SSO that does not send

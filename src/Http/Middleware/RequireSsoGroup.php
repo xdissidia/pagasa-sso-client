@@ -35,7 +35,8 @@ class RequireSsoGroup
             throw new InvalidArgumentException('sso.group needs at least one group name, e.g. sso.group:PMIS-Admin.');
         }
 
-        $known = $this->sso->groups($request);
+        $guard = $this->sso->activeGuard();
+        $known = $this->sso->groups($request, $guard);
 
         if ($known === null) {
             abort_unless($this->sso->enabled(), 403, 'Group membership cannot be checked without SSO.');
@@ -46,7 +47,7 @@ class RequireSsoGroup
                 $request->isMethod('GET') ? $request->fullUrl() : url()->previous()
             );
 
-            return $this->sso->redirect($request);
+            return $this->sso->redirect($request, false, $guard);
         }
 
         abort_unless(SsoResult::anyGroupMatches($known, $groups), 403, 'You do not have access to this page.');

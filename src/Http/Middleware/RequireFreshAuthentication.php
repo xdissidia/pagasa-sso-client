@@ -32,7 +32,8 @@ class RequireFreshAuthentication
     public function handle(Request $request, Closure $next, $seconds = null): Response
     {
         $maxAge = $seconds !== null && $seconds !== '' ? (int) $seconds : $this->sso->maxAuthAge();
-        $authTime = $this->sso->authTime($request);
+        $guard = $this->sso->activeGuard();
+        $authTime = $this->sso->authTime($request, $guard);
 
         if ($authTime !== null && time() - $authTime <= $maxAge) {
             return $next($request);
@@ -46,6 +47,6 @@ class RequireFreshAuthentication
             $request->isMethod('GET') ? $request->fullUrl() : url()->previous()
         );
 
-        return $this->sso->stepUp($request);
+        return $this->sso->stepUp($request, $guard);
     }
 }

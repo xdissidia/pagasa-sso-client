@@ -5,6 +5,7 @@ namespace Pagasa\Sso\Tests\Feature;
 use Illuminate\Support\Facades\Route;
 use InvalidArgumentException;
 use Pagasa\Sso\Facades\Sso;
+use Pagasa\Sso\PendingStates;
 use Pagasa\Sso\Testing\SsoResponses;
 use Pagasa\Sso\Tests\TestCase;
 
@@ -113,5 +114,30 @@ class GroupTest extends TestCase
         $this->expectException(InvalidArgumentException::class);
 
         $this->get('/misconfigured');
+    }
+
+    public function test_a_named_guard_fetches_and_checks_groups_on_that_guard(): void
+    {
+        config(['auth.guards.staff' => ['driver' => 'session', 'provider' => 'users']]);
+        Route::get('/staff-admin', function () {
+            return 'staff-admin:'.auth()->id();
+        })->middleware(['web', 'sso.auth:staff', 'sso.group:PMIS-Admin']);
+
+        // Groups recorded on the default guard say nothing about the staff guard.
+        $this->signInThroughSso(['PMIS-Admin']);
+        $user = $this->makeUser(['guid' => 'g-2']);
+        $this->actingAs($user, 'staff');
+
+        $location = $this->get('/staff-admin')->headers->get('Location');
+        parse_str((string) parse_url($location, PHP_URL_QUERY), $query);
+        $this->assertSame('staff', session(PendingStates::SESSION_KEY)[$query['state']]['guard']);
+
+        SsoResponses::fake(['guid' => 'g-2', 'username' => 'staffer'], ['groups' => ['PMIS-Admin']]);
+        $this->get('/sso/callback?state='.$query['state'].'&code=c')
+            ->assertRedirect('http://localhost/staff-admin');
+
+        $this->assertSame(['PMIS-Admin'], Sso::groups(null, 'staff'));
+        $this->assertSame($user->getKey(), auth('staff')->id());
+        $this->get('/staff-admin')->assertOk()->assertSee('staff-admin:'.$user->getKey());
     }
 }

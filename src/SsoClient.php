@@ -177,9 +177,9 @@ class SsoClient
      * null if unknown (not signed in through SSO, or restored from a
      * remember-me cookie at the SSO).
      */
-    public function authTime(?Request $request = null): ?int
+    public function authTime(?Request $request = null, ?string $guard = null): ?int
     {
-        $verified = $this->verified($request);
+        $verified = $this->verified($request, $guard);
 
         return isset($verified['auth_time']) ? (int) $verified['auth_time'] : null;
     }
@@ -189,9 +189,9 @@ class SsoClient
      *
      * @return string[]|null
      */
-    public function amr(?Request $request = null): ?array
+    public function amr(?Request $request = null, ?string $guard = null): ?array
     {
-        $verified = $this->verified($request);
+        $verified = $this->verified($request, $guard);
 
         return isset($verified['amr']) && is_array($verified['amr']) ? $verified['amr'] : null;
     }
@@ -204,9 +204,9 @@ class SsoClient
      *
      * @return string[]|null
      */
-    public function groups(?Request $request = null): ?array
+    public function groups(?Request $request = null, ?string $guard = null): ?array
     {
-        $verified = $this->verified($request);
+        $verified = $this->verified($request, $guard);
 
         return isset($verified['groups']) && is_array($verified['groups']) ? $verified['groups'] : null;
     }
@@ -225,6 +225,18 @@ class SsoClient
     public function states(Request $request): PendingStates
     {
         return new PendingStates($request->session());
+    }
+
+    /**
+     * The guard the current request authenticates with: the one `sso.auth`
+     * (or `auth`) selected for this route if someone is signed in on it,
+     * otherwise the configured SSO guard.
+     */
+    public function activeGuard(): string
+    {
+        $current = Auth::getDefaultDriver();
+
+        return Auth::guard($current)->check() ? $current : $this->guard();
     }
 
     /**
@@ -283,11 +295,12 @@ class SsoClient
 
     /**
      * The stored claims, but only while the user they were recorded for is
-     * still the one signed in - never another user's leftovers.
+     * still the one signed in - never another user's leftovers. With $guard,
+     * only claims recorded for that guard.
      *
      * @return array<string, mixed>|null
      */
-    protected function verified(?Request $request): ?array
+    protected function verified(?Request $request, ?string $guard = null): ?array
     {
         $request = $request ?: request();
 
@@ -298,6 +311,10 @@ class SsoClient
         $verified = $request->session()->get(self::VERIFIED_KEY);
 
         if (! is_array($verified) || ! isset($verified['guard'], $verified['user'])) {
+            return null;
+        }
+
+        if ($guard !== null && (string) $verified['guard'] !== $guard) {
             return null;
         }
 

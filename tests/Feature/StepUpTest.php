@@ -100,4 +100,21 @@ class StepUpTest extends TestCase
 
         $this->getJson('/sensitive')->assertForbidden();
     }
+
+    public function test_a_named_guard_steps_up_on_that_guard(): void
+    {
+        config(['auth.guards.staff' => ['driver' => 'session', 'provider' => 'users']]);
+        $this->app['router']->get('/staff-sensitive', function () {
+            return 'staff-sensitive';
+        })->middleware(['web', 'sso.auth:staff', 'sso.fresh:300']);
+
+        // A fresh sign-in on the default guard does not make the staff guard fresh.
+        $this->signInThroughSso(['auth_time' => time() - 60]);
+        $this->actingAs($this->makeUser(['guid' => 'g-2']), 'staff');
+
+        $location = $this->get('/staff-sensitive')->headers->get('Location');
+        parse_str((string) parse_url($location, PHP_URL_QUERY), $query);
+        $this->assertSame('login', $query['prompt']);
+        $this->assertSame('staff', session(PendingStates::SESSION_KEY)[$query['state']]['guard']);
+    }
 }
