@@ -50,12 +50,11 @@ composer config --global github-oauth.github.com <token>
 
 The service provider and the `Sso` facade register themselves.
 
-> **Laravel 8 apps:** Composer 2.9+ refuses to install Laravel versions with
-> published security advisories, and every Laravel 8 release has them. If
-> `composer require` fails for that reason, run
-> `composer require pagasa/sso-client --no-update` and then
-> `composer update pagasa/sso-client`. That leaves `laravel/framework` pinned
-> where your lock file already has it.
+> **Laravel 8 apps** need PHP 8.0 or newer on every server, deploy servers
+> included. A plain `composer require` leaves your locked `laravel/framework`
+> where it is. A full `composer update` on Laravel 8 fails on Composer 2.9+,
+> because every Laravel 8 release has published security advisories. That is
+> not caused by this package.
 
 ## Register the app on the SSO
 
