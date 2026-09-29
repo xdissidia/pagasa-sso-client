@@ -71,7 +71,7 @@ The URL must be your app's callback, `{APP_URL}/sso/callback`. It must match
 ## Configure
 
 ```dotenv
-SSO_URL=https://sso.pagasa.gov
+SSO_URL=https://sso2.pagasa.co
 SSO_CLIENT_ID=pmis
 SSO_CLIENT_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
